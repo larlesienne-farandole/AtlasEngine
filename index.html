@@ -192,6 +192,7 @@ textarea.txt { resize: vertical; min-height: 54px; font: 15px/1.3 var(--f-map); 
       <button id="vAtlas" aria-pressed="true" title="Finished atlas render">Atlas</button>
       <button id="vOverlay" aria-pressed="false" title="Atlas with your painted layers on top">Overlay</button>
       <button id="vSketch" aria-pressed="false" title="Only your painted layers">Sketch</button>
+      <button id="vRegions" aria-pressed="false" title="The land divided into natural regions">Regions</button>
     </div>
     <button class="btn toggle" id="pureBtn" aria-pressed="false" title="Hide all names, symbols, roads, borders and grid">Pure terrain</button>
     <div class="spacer"></div>
@@ -1216,6 +1217,7 @@ const INK = '#22201c';
 const STYLES = {
   realm:  { name: 'Realm',       size: 46, upper: true,  italic: false, weight: 400, spacing: 0.62, fill: 'rgba(240,238,232,0.94)', stroke: '#4e4c48', sw: 1.0, def: 'Larlesienne-Carillon' },
   range:  { name: 'Mountains',   size: 15, upper: true,  italic: false, weight: 500, spacing: 0.34, fill: INK, def: 'Zagros Mtns.' },
+  province: { name: 'Province', size: 10.5, upper: true, italic: false, weight: 600, spacing: 0.16, fill: '#3a3531', def: 'Leinster' },
   region: { name: 'Region',      size: 14, upper: false, italic: true,  weight: 400, spacing: 0.42, fill: '#33302a', def: 'Pannonian Plain' },
   sea:    { name: 'Sea',         size: 41, upper: true,  italic: true,  weight: 400, spacing: 0.16, fill: '#285470', def: 'Sea\nof\nMarmara' },
   water:  { name: 'Gulf / bay',  size: 15, upper: false, italic: true,  weight: 400, spacing: 0.12, fill: '#285470', def: 'Gulf of Aden' },
@@ -1231,7 +1233,7 @@ const PLACE_TYPES = {
   shrine:  { name: 'Shrine', size: 9 },
   peak:    { name: 'Peak', size: 8.5 },
 };
-const ROAD_KINDS = { road: 'Road', trail: 'Trail', sea: 'Sea route' };
+const ROAD_KINDS = { road: 'Road', trail: 'Trail', sea: 'Sea route', border: 'Region border' };
 
 // ===================================================================== names
 // Real-world place names, used as placeholders you can rename.
@@ -1363,7 +1365,7 @@ function generate() {
       gen.running = false; terrainStale = false;
       erodeWorker.terminate(); erodeWorker = null;
       const secs = Math.round((performance.now() - gen.t0) / 1000);
-      computeRivers(); buildCostGrid();
+      computeRivers(); buildCostGrid(); regionDirty();
       if (S.pendingPopulate) { const kind = S.pendingPopulate; S.pendingPopulate = false; if (kind === 'world') populateWorld(); else populateSample(); }
       requestRaster(); scheduleRoads(); scheduleStatic(); relayout();
       if (ui.shapeOverlay && ui.view === 'overlay') setView('atlas'); ui.shapeOverlay = false;
@@ -1680,10 +1682,16 @@ function drawStatic(c, k, cw, ch) {
       c.strokeStyle = 'rgba(250,244,228,0.5)'; c.lineWidth = 2.0; c.stroke();
       c.strokeStyle = 'rgb(92,50,36)'; c.lineWidth = 1.15; c.stroke();
       c.lineCap = 'butt';
+    } else if (r.kind === 'border') {
+      // region / province line: a fine grey rule, like state lines on a national map
+      c.setLineDash([]); c.lineCap = 'round';
+      c.strokeStyle = 'rgba(250,248,240,0.6)'; c.lineWidth = 2.5; c.stroke();
+      c.strokeStyle = 'rgb(92,80,84)'; c.lineWidth = 1.05; c.stroke();
     } else { c.setLineDash([4.5, 4.5]); c.strokeStyle = 'rgba(56,100,128,0.85)'; c.lineWidth = 0.65; c.stroke(); }
     c.setLineDash([]); c.lineCap = 'butt';
   };
-  if (vis('roads')) { for (const r of autoRoads) drawRoad({ ...r, auto: true }); for (const r of S.roads) if (r.kind !== 'river') drawRoad(r); }
+  if (vis('regionlines')) for (const r of S.roads) if (r.kind === 'border') drawRoad(r);
+  if (vis('roads')) { for (const r of autoRoads) drawRoad({ ...r, auto: true }); for (const r of S.roads) if (r.kind !== 'river' && r.kind !== 'border') drawRoad(r); }
 }
 
 // ===================================================================== text layout
@@ -1867,9 +1875,11 @@ function draw() {
   if (showSketch) { c.imageSmoothingEnabled = V.s * MW / PW < 3; c.drawImage(sketchCanvas, 0, 0, MW, MH); c.imageSmoothingEnabled = true; }
   else c.drawImage(rasterCanvas, 0, 0, MW, MH);
   if (ui.view === 'overlay' && hasRaster) { c.globalAlpha = 0.58; c.drawImage(sketchCanvas, 0, 0, MW, MH); c.globalAlpha = 1; }
+  if (ui.view === 'regions' && regionCanvas) { c.fillStyle = 'rgba(246,244,238,0.5)'; c.fillRect(0, 0, MW, MH); c.drawImage(regionCanvas, 0, 0, MW, MH); }
   if (eraseAny) { c.imageSmoothingEnabled = false; c.drawImage(eraseCanvas, 0, 0, MW, MH); c.imageSmoothingEnabled = true; }
   c.drawImage(staticCanvas, 0, 0, MW, MH);
   drawObjects(c);
+  if (ui.view === 'regions' && !S.labels.some((l) => l.gen)) drawRegionNames(c);
   // neatline
   c.strokeStyle = '#2a2724'; c.lineWidth = 1.2 / V.s; c.strokeRect(0, 0, MW, MH);
   drawInsert(c);
@@ -1951,6 +1961,7 @@ const TOOLS = [
   { id: 'place', name: 'Places', key: 'p', hint: 'Click to drop a settlement or site. Names are invented for you; edit them on the right.', icon: '<circle cx="12" cy="12" r="5" fill="currentColor" fill-opacity=".2"/><circle cx="12" cy="12" r="1.6" fill="currentColor"/>' },
   { id: 'label', name: 'Labels', key: 't', hint: 'Click to place a label. Set its text, angle and curve on the right.', icon: '<path d="M5 19 11 5h2l6 14M7.5 14h9"/>' },
   { id: 'foreign', name: 'Borders', key: 'b', brush: true, layer: 'foreign', modes: ['Foreign land', 'Your realm'], hint: 'Paint land outside your realm. It turns pale and gets a purple border.', icon: '<path d="M4 5c3 2 2 5 5 6s2 5 5 6 3 2 6 2" stroke-dasharray="2.5 2.2"/>' },
+  { id: 'rline', name: 'Regions', key: 'y', hint: 'Click to add points along a region border. Double-click or press Enter to finish, Esc to cancel.', icon: '<path d="M4 4h16v16H4z" stroke-opacity="0.45"/><path d="M9 4c1 4-2 6 0 9s4 3 3 7" /><path d="M9 13c3-1 6 1 11-1" />' },
 ];
 const isBrush = (id) => id === 'eraser' || !!(TOOLS.find((t) => t.id === id) || {}).brush;
 const brushRadius = () => ui.tool === 'eraser' ? Math.max(ui.eraser.size, 0.5) : ui.brush.size;
@@ -2000,7 +2011,10 @@ function updateHint() {
   h.hidden = !t || !t.hint || V.w < 520; h.textContent = t ? t.hint : '';
 }
 function setView(v) {
+  if (v === 'regions' && !T) { toast('Generate terrain first'); v = 'atlas'; }
   ui.view = v;
+  $('vRegions').setAttribute('aria-pressed', String(v === 'regions'));
+  if (v === 'regions') ensureRegions();
   $('vAtlas').setAttribute('aria-pressed', String(v === 'atlas'));
   $('vOverlay').setAttribute('aria-pressed', String(v === 'overlay'));
   $('vSketch').setAttribute('aria-pressed', String(v === 'sketch'));
@@ -2008,6 +2022,233 @@ function setView(v) {
   redraw();
 }
 
+// ===================================================================== regions
+// Divides the land into regions that grow out from your settlements (and into the wilds beyond).
+// Growth is cheap along roads and open valleys, and expensive across big rivers, ridges, high ground
+// and deep forest, so borders settle on those natural lines.
+let regionCanvas = null, regionStale = true, regionTimer = 0, REG = null;
+function regOpts() { return S.p.regions || (S.p.regions = { size: 0.45, river: 0.7, mtn: 0.7, forest: 0.5, road: 0.6, seed: 1 }); }
+function regionDirty() { regionStale = true; if (ui.view === 'regions') { clearTimeout(regionTimer); regionTimer = setTimeout(() => { ensureRegions(); redraw(); }, 400); } }
+const REG_COLS = [[231, 196, 163], [181, 209, 176], [176, 196, 222], [226, 211, 150], [206, 180, 214], [168, 214, 210], [228, 178, 182], [200, 206, 160], [214, 194, 222], [190, 214, 228]];
+function ensureRegions() {
+  if (!T || !regionStale) return;
+  regionStale = false;
+  const o = regOpts(), R = E.mulberry32(9000 + (o.seed | 0));
+  const f = Math.max(1, Math.round(T.sw / 440)), gw = Math.floor(T.sw / f), gh = Math.floor(T.sh / f), n = gw * gh, cm = MW / gw;
+  const z = new Float32Array(n), ld = new Uint8Array(n), ac = new Float32Array(n);
+  for (let y = 0; y < gh; y++) for (let x = 0; x < gw; x++) {
+    let s = 0, l = 0, m = 0;
+    for (let j = 0; j < f; j++) for (let k = 0; k < f; k++) { const i = (y * f + j) * T.sw + x * f + k; s += T.zN[i]; l += T.land[i]; m = Math.max(m, T.acc[i]); }
+    const i = y * gw + x; z[i] = s / (f * f); ld[i] = l * 2 >= f * f ? 1 : 0; ac[i] = m;
+  }
+  const lay = (name, x, y) => { const L = S.layers[name]; return L ? L[clamp(Math.floor((y + 0.5) / gh * PH), 0, PH - 1) * PW + clamp(Math.floor((x + 0.5) / gw * PW), 0, PW - 1)] : 0; };
+  const thr = Math.max(8, (520 / S.p.rivers) * T.thrScale);
+  // roads (drawn and automatic) as cells
+  const road = new Uint8Array(n);
+  for (const r of S.roads.concat(autoRoads)) { if (r.kind === 'river' || r.kind === 'sea') continue; for (let k = 0; k < r.pts.length - 1; k++) { const A = r.pts[k], B = r.pts[k + 1], st = Math.ceil(Math.hypot(B[0] - A[0], B[1] - A[1]) / cm) + 1; for (let s = 0; s <= st; s++) road[clamp(Math.floor((A[1] + (B[1] - A[1]) * s / st) / cm), 0, gh - 1) * gw + clamp(Math.floor((A[0] + (B[0] - A[0]) * s / st) / cm), 0, gw - 1)] = r.kind === 'trail' ? 1 : 2; } }
+  // borders you drew are walls the regions can't grow across
+  const wall = new Uint8Array(n);
+  for (const r of S.roads) { if (r.kind !== 'border' || r.gen) continue; const pts = E.chaikin(r.pts, 2); for (let k = 0; k < pts.length - 1; k++) { const A = pts[k], B = pts[k + 1], st = Math.ceil(Math.hypot(B[0] - A[0], B[1] - A[1]) / cm * 2) + 1; for (let s = 0; s <= st; s++) wall[clamp(Math.floor((A[1] + (B[1] - A[1]) * s / st) / cm), 0, gh - 1) * gw + clamp(Math.floor((A[0] + (B[0] - A[0]) * s / st) / cm), 0, gw - 1)] = 1; } }
+  // per-cell cost of passing through
+  const cost = new Float32Array(n), river = new Float32Array(n);
+  for (let y = 0; y < gh; y++) for (let x = 0; x < gw; x++) {
+    const i = y * gw + x; if (!ld[i]) continue;
+    const gx = (z[y * gw + Math.min(gw - 1, x + 1)] - z[y * gw + Math.max(0, x - 1)]) * 0.5, gy = (z[Math.min(gh - 1, y + 1) * gw + x] - z[Math.max(0, y - 1) * gw + x]) * 0.5;
+    const slope = Math.hypot(gx, gy) / cm * 100;
+    let c = 1 + o.mtn * (6 * Math.max(0, z[i] - 0.12) * 4 + 3 * slope * slope);
+    c += o.forest * 3.5 * lay('forest', x, y) + 2 * lay('marsh', x, y);
+    if (iceAt((x + 0.5) * cm, (y + 0.5) * cm)) c += 6;
+    if (road[i]) c *= 1 - o.road * (road[i] === 2 ? 0.7 : 0.4);
+    cost[i] = c;
+    cost[i] *= 1 + 0.6 * E.fbm((x + 0.5) * cm / 70, (y + 0.5) * cm / 70, 4100 + (o.seed | 0), 3);   // so open-ground borders wander instead of running straight
+    if (ac[i] >= thr) river[i] = o.river * 16 * (0.5 + Math.log2(ac[i] / thr));
+  }
+  // seeds: settlements first (capital, cities, then towns), spaced apart; then the wilds
+  const spacing = 70 + o.size * 330, seeds = [];
+  const rank = { capital: 0, city: 1, port: 1, town: 2, caravan: 3 };
+  const pl = S.places.filter((p) => rank[p.type] != null && layerAt('land', p.x, p.y) > 0.5).sort((a, b) => rank[a.type] - rank[b.type] || (b.name ? 1 : 0) - (a.name ? 1 : 0));
+  for (const p of pl) {
+    const minD = spacing * (p.type === 'capital' ? 0.55 : p.type === 'city' ? 0.65 : 0.85);
+    if (seeds.some((s) => Math.hypot(s.x - p.x, s.y - p.y) < minD)) continue;
+    const gx = clamp(Math.floor(p.x / cm), 0, gw - 1), gy = clamp(Math.floor(p.y / cm), 0, gh - 1);
+    if (!ld[gy * gw + gx]) continue;
+    seeds.push({ x: p.x, y: p.y, i: gy * gw + gx, w: p.type === 'capital' ? 1.35 : p.type === 'city' ? 1.15 : 1, name: p.name || '', wild: false });
+  }
+  // wilds: keep adding seeds at the land furthest from any seed
+  const src = new Uint8Array(n); for (const s of seeds) src[s.i] = 1;
+  for (let guard = 0; guard < 400; guard++) {
+    let any = false; for (let i = 0; i < n; i++) if (src[i]) { any = true; break; }
+    const dd = any ? E.chamfer(src, gw, gh) : null;
+    let best = -1, bd = 0;
+    for (let i = 0; i < n; i++) { if (!ld[i]) continue; const d = dd ? dd[i] * cm : 1e9; const j = d * (0.85 + 0.3 * R()); if (j > bd) { bd = j; best = i; } }
+    if (best < 0 || (dd && dd[best] * cm < spacing * 0.95)) break;
+    // nudge toward the lowest ground nearby so wild regions centre on basins
+    let bi = best; const bx0 = best % gw, by0 = (best / gw) | 0, rr = Math.max(2, Math.round(spacing / cm * 0.2));
+    for (let dy = -rr; dy <= rr; dy++) for (let dx = -rr; dx <= rr; dx++) { const x = bx0 + dx, y = by0 + dy; if (x < 0 || y < 0 || x >= gw || y >= gh) continue; const j = y * gw + x; if (ld[j] && z[j] < z[bi]) bi = j; }
+    src[bi] = 1; seeds.push({ x: (bi % gw + 0.5) * cm, y: (((bi / gw) | 0) + 0.5) * cm, i: bi, w: 0.9, name: '', wild: true });
+  }
+  // grow all regions at once (multi-source Dijkstra)
+  const dist = new Float32Array(n).fill(Infinity), lab = new Int16Array(n).fill(-1);
+  const hk = new Float32Array(n * 6), hi = new Int32Array(n * 6), hl = new Int16Array(n * 6); let hn = 0;
+  const push = (k, i, l) => { let c = hn++; while (c > 0) { const p = (c - 1) >> 1; if (hk[p] <= k) break; hk[c] = hk[p]; hi[c] = hi[p]; hl[c] = hl[p]; c = p; } hk[c] = k; hi[c] = i; hl[c] = l; };
+  let pk = 0, pl2 = 0;
+  const pop = () => { const top = hi[0]; pk = hk[0]; pl2 = hl[0]; hn--; if (hn > 0) { const k = hk[hn], i = hi[hn], l = hl[hn]; let c = 0; for (;;) { let m = 2 * c + 1; if (m >= hn) break; if (m + 1 < hn && hk[m + 1] < hk[m]) m++; if (hk[m] >= k) break; hk[c] = hk[m]; hi[c] = hi[m]; hl[c] = hl[m]; c = m; } hk[c] = k; hi[c] = i; hl[c] = l; } return top; };
+  seeds.forEach((s, k) => { dist[s.i] = 0; push(0, s.i, k); });
+  const D = [[1, 0, 1], [-1, 0, 1], [0, 1, 1], [0, -1, 1], [1, 1, 1.414], [1, -1, 1.414], [-1, 1, 1.414], [-1, -1, 1.414]];
+  while (hn > 0 && hn < n * 6 - 8) {
+    const i = pop(), d = pk, l = pl2; if (lab[i] >= 0) continue; lab[i] = l;
+    const x = i % gw, y = (i / gw) | 0, w = seeds[l].w;
+    if (wall[i] && d > 0) continue;   // a drawn border: claimed, but nothing grows past it
+    for (const [dx, dy, dd] of D) {
+      const nx = x + dx, ny = y + dy; if (nx < 0 || ny < 0 || nx >= gw || ny >= gh) continue;
+      const j = ny * gw + nx; if (!ld[j] || lab[j] >= 0) continue;
+      // crossing a river costs once, at the step that crosses it
+      const cross = river[j] > river[i] ? river[j] - river[i] * 0.5 : 0;
+      const nd = d + (dd * (cost[i] + cost[j]) * 0.5 + cross) / w;
+      if (nd < dist[j]) { dist[j] = nd; push(nd, j, l); }
+    }
+  }
+  // tidy: one pass of majority smoothing, and absorb slivers
+  const lab2 = Int16Array.from(lab);
+  for (let y = 1; y < gh - 1; y++) for (let x = 1; x < gw - 1; x++) {
+    const i = y * gw + x; if (lab[i] < 0) continue; const cnt = new Map();
+    for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) { const v = lab[i + dy * gw + dx]; if (v >= 0) cnt.set(v, (cnt.get(v) || 0) + 1); }
+    let bv = lab[i], bc = 0; for (const [v, c] of cnt) if (c > bc) { bv = v; bc = c; } if (bc >= 6) lab2[i] = bv;
+  }
+  // a border you drew splits whatever region it runs through, along the line and on out to that region's edge
+  for (const r of S.roads) {
+    if (r.kind !== 'border' || r.gen) continue;
+    const pts = E.chaikin(r.pts, 2); if (pts.length < 2) continue;
+    const side = (px, py) => { let bd = 1e18, sg = 0, dd = 0; for (let k = 0; k < pts.length - 1; k++) { const A = pts[k], B = pts[k + 1], ex = B[0] - A[0], ey = B[1] - A[1], l2 = ex * ex + ey * ey || 1, t = clamp(((px - A[0]) * ex + (py - A[1]) * ey) / l2, 0, 1), qx = A[0] + ex * t - px, qy = A[1] + ey * t - py, d2 = qx * qx + qy * qy; if (d2 < bd) { bd = d2; sg = Math.sign(ex * (py - A[1]) - ey * (px - A[0])); } } return [sg, Math.sqrt(bd)]; };
+    const reach = spacing * 1.1, K0 = seeds.length;
+    for (let k = 0; k < K0; k++) {
+      let plus = 0, minus = 0, on = 0;
+      for (let i = 0; i < n; i++) if (lab2[i] === k) { const [sg, d] = side((i % gw + 0.5) * cm, (((i / gw) | 0) + 0.5) * cm); if (d < cm * 1.6) on++; if (d < reach) { if (sg > 0) plus++; else if (sg < 0) minus++; } }
+      if (on < 4 || plus < 6 || minus < 6) continue;   // only regions the line actually runs through
+      const [ss] = side(seeds[k].x, seeds[k].y), nk = seeds.length;
+      let sx = 0, sy = 0, c = 0;
+      for (let i = 0; i < n; i++) if (lab2[i] === k) { const x = (i % gw + 0.5) * cm, y = (((i / gw) | 0) + 0.5) * cm, [sg, d] = side(x, y); if (d < reach && sg && sg !== ss) { lab2[i] = nk; sx += x; sy += y; c++; } }
+      if (c) seeds.push({ x: sx / c, y: sy / c, i: -1, w: 1, name: '', wild: seeds[k].wild });
+    }
+  }
+  // stats, centres, neighbours
+  const K = seeds.length, area = new Float32Array(K), adj = Array.from({ length: K }, () => new Set());
+  for (let i = 0; i < n; i++) { const l = lab2[i]; if (l < 0) continue; area[l] += cm * cm; const x = i % gw; if (x < gw - 1 && lab2[i + 1] >= 0 && lab2[i + 1] !== l) { adj[l].add(lab2[i + 1]); adj[lab2[i + 1]].add(l); } if (i + gw < n && lab2[i + gw] >= 0 && lab2[i + gw] !== l) { adj[l].add(lab2[i + gw]); adj[lab2[i + gw]].add(l); } }
+  const border = new Uint8Array(n); for (let i = 0; i < n; i++) { const l = lab2[i], x = i % gw; if (l < 0 || (x > 0 && lab2[i - 1] !== l) || (x < gw - 1 && lab2[i + 1] !== l) || (i >= gw && lab2[i - gw] !== l) || (i + gw < n && lab2[i + gw] !== l)) border[i] = 1; }
+  const din = E.chamfer(border, gw, gh), pole = new Int32Array(K).fill(-1);
+  for (let i = 0; i < n; i++) { const l = lab2[i]; if (l >= 0 && (pole[l] < 0 || din[i] > din[pole[l]])) pole[l] = i; }
+  // colours: neighbours never share one
+  const col = new Int8Array(K).fill(-1), order = [...Array(K).keys()].sort((a, b) => adj[b].size - adj[a].size);
+  for (const k of order) { const used = new Set([...adj[k]].map((j) => col[j])); let c = Math.floor(R() * REG_COLS.length); for (let t = 0; t < REG_COLS.length && used.has(c); t++) c = (c + 1) % REG_COLS.length; col[k] = c; }
+  // names: settled regions take their seat's name, wild ones get one
+  const NR = E.mulberry32(77 + (o.seed | 0));
+  const taken = new Set();
+  const names = seeds.map((s) => {
+    if (s.name) { const nm = s.name.replace(/\s+/g, ' ').trim(); taken.add(nm); return nm; }
+    for (let t = 0; t < 40; t++) { const nm = genName(NR, 'realm'); if (!taken.has(nm)) { taken.add(nm); return nm; } }
+    for (let t = 0; t < 40; t++) { const nm = genName(NR, 'town'); if (!taken.has(nm)) { taken.add(nm); return nm; } }
+    return '';
+  });
+  REG = { gw, gh, cm, lab: lab2, seeds, area, pole, col, names, din };
+  // paint
+  const W = Math.min(1100, gw * 2.5 | 0), H = Math.round(W * gh / gw);
+  if (!regionCanvas || regionCanvas.width !== W || regionCanvas.height !== H) { regionCanvas = document.createElement('canvas'); regionCanvas.width = W; regionCanvas.height = H; }
+  const ctx = regionCanvas.getContext('2d'), img = ctx.createImageData(W, H), L = new Int16Array(W * H);
+  // sample labels with a little jitter-free smoothing: nearest of the 4 surrounding cells weighted by distance
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+    const gx = (x + 0.5) / W * gw - 0.5, gy = (y + 0.5) / H * gh - 0.5, cx = Math.round(gx), cy = Math.round(gy);
+    const ws = new Map();
+    for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+      const xx = clamp(cx + dx, 0, gw - 1), yy = clamp(cy + dy, 0, gh - 1), d2 = (xx - gx) * (xx - gx) + (yy - gy) * (yy - gy), w = Math.exp(-d2 / 1.1);
+      const l = lab2[yy * gw + xx]; ws.set(l, (ws.get(l) || 0) + w);
+    }
+    let bl = -1, bw = -1; for (const [l, w] of ws) if (w > bw) { bw = w; bl = l; } L[y * W + x] = bl;
+  }
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+    const i = y * W + x, l = L[i]; if (l < 0) continue;
+    const c = REG_COLS[col[l]], o4 = i * 4;
+    const edge = (x > 0 && L[i - 1] !== l && L[i - 1] >= 0) || (y > 0 && L[i - W] !== l && L[i - W] >= 0) || (x < W - 1 && L[i + 1] !== l && L[i + 1] >= 0) || (y < H - 1 && L[i + W] !== l && L[i + W] >= 0);
+    if (edge) { img.data[o4] = 70; img.data[o4 + 1] = 58; img.data[o4 + 2] = 66; img.data[o4 + 3] = 235; }
+    else { img.data[o4] = c[0]; img.data[o4 + 1] = c[1]; img.data[o4 + 2] = c[2]; img.data[o4 + 3] = seeds[l].wild ? 120 : 165; }
+  }
+  ctx.putImageData(img, 0, 0);
+  if (ui.tab === 'tool') renderInspector();
+}
+// Turn the region map into border lines (and name labels) on the atlas
+function applyRegions(withNames) {
+  if (!REG) return;
+  pushObjUndo();
+  S.roads = S.roads.filter((r) => !r.gen); S.labels = S.labels.filter((l) => !l.gen);
+  const { gw, gh, cm, lab } = REG, L = (x, y) => (x < 0 || y < 0 || x >= gw || y >= gh) ? -1 : lab[y * gw + x];
+  // edges between cells of different regions, on the cell-corner lattice
+  const adj = new Map(), key = (x, y) => y * (gw + 1) + x;
+  const link = (a, b) => { if (!adj.has(a)) adj.set(a, []); if (!adj.has(b)) adj.set(b, []); adj.get(a).push(b); adj.get(b).push(a); };
+  for (let y = 0; y < gh; y++) for (let x = 0; x < gw; x++) {
+    const l = L(x, y); if (l < 0) continue;
+    const r = L(x + 1, y), d = L(x, y + 1);
+    if (r >= 0 && r !== l) link(key(x + 1, y), key(x + 1, y + 1));
+    if (d >= 0 && d !== l) link(key(x, y + 1), key(x + 1, y + 1));
+  }
+  const used = new Set(), ek = (a, b) => a < b ? a + ',' + b : b + ',' + a, lines = [];
+  const walk = (a, b) => { const pts = [a, b]; used.add(ek(a, b)); let prev = a, cur = b; for (;;) { const nb = adj.get(cur); if (nb.length !== 2) break; const nx = nb[0] === prev ? nb[1] : nb[0]; if (used.has(ek(cur, nx))) break; used.add(ek(cur, nx)); pts.push(nx); prev = cur; cur = nx; } return pts; };
+  for (const [a, nb] of adj) if (nb.length !== 2) for (const b of nb) if (!used.has(ek(a, b))) lines.push(walk(a, b));
+  for (const [a, nb] of adj) for (const b of nb) if (!used.has(ek(a, b))) lines.push(walk(a, b));
+  for (const ln of lines) {
+    if (ln.length < 3) continue;
+    let pts = ln.map((k) => [(k % (gw + 1)) * cm, Math.floor(k / (gw + 1)) * cm]);
+    // round off the grid steps, then thin the points
+    for (let it = 0; it < 3; it++) pts = pts.map((p, i) => (i === 0 || i === pts.length - 1) ? p : [(pts[i - 1][0] + p[0] * 2 + pts[i + 1][0]) / 4, (pts[i - 1][1] + p[1] * 2 + pts[i + 1][1]) / 4]);
+    const keep = pts.filter((p, i) => i === 0 || i === pts.length - 1 || i % 2 === 0);
+    S.roads.push({ id: nid(), kind: 'border', pts: keep, gen: true });
+  }
+  if (withNames) for (let k = 0; k < REG.seeds.length; k++) {
+    const p = REG.pole[k], nm = REG.names[k]; if (p < 0 || !nm || REG.din[p] * cm < 10) continue;
+    const s = REG.seeds[k];
+    let x = (p % gw + 0.5) * cm, y = (((p / gw) | 0) + 0.5) * cm;
+    // keep clear of the seat town's own name
+    if (!s.wild && Math.hypot(x - s.x, y - s.y) < 22) y = s.y + (y > s.y ? 16 : -16);
+    S.labels.push({ id: nid(), style: 'province', text: nm, x, y, angle: 0, curve: 0, size: clamp(REG.din[p] * cm / 40, 0.75, 1.25), spacing: 1, gen: true });
+  }
+  S.p.show.regionlines = true;
+  afterObjectsChange(false); scheduleStatic(); setView('atlas');
+  toast(withNames ? 'Region borders and names added to the map' : 'Region borders added to the map');
+}
+function drawRegionNames(c) {
+  if (!REG) return;
+  const { gw, cm, pole, names, seeds, din, area } = REG;
+  for (let k = 0; k < seeds.length; k++) {
+    if (pole[k] < 0) continue;
+    const x = (pole[k] % gw + 0.5) * cm, y = (((pole[k] / gw) | 0) + 0.5) * cm, room = din[pole[k]] * cm;
+    const name = names[k]; if (!name || room < 6) continue;
+    const size = clamp(room / 3.2, 5, 13);
+    const w = scMetrics(name.toUpperCase(), size).w; if (w > room * 3.2) continue;
+    c.save(); c.lineWidth = 2.4; c.strokeStyle = 'rgba(250,248,240,0.85)'; c.lineJoin = 'round';
+    c.font = fontStr(false, 500, size); c.textAlign = 'center'; c.textBaseline = 'middle';
+    const t = name.toUpperCase().split('').join(' ');
+    c.strokeText(t, x, y); c.fillStyle = seeds[k].wild ? '#5a5650' : '#2c2622'; c.fillText(t, x, y);
+    c.restore();
+  }
+}
+function regionPanel() {
+  if (ui.view !== 'regions') return null;
+  const o = regOpts(), re = () => { regionStale = true; ensureRegions(); redraw(); autosave(); };
+  const pc = (v) => Math.round(v * 100) + '%';
+  const settled = REG ? REG.seeds.filter((s) => !s.wild).length : 0, wild = REG ? REG.seeds.length - settled : 0;
+  return h('div', { class: 'sec' }, h('h3', { text: 'Regions' }),
+    h('p', { text: 'The land divided into regions grown out from your settlements, with borders drawn to rivers, ridges and forests. Faint ones are the unsettled wilds. They redraw as you edit the map.' }),
+    slider('rgSize', 'Region size', o.size, 0, 1, 0.05, (v) => '~' + Math.round(70 + v * 330) + ' mi across', (v) => { o.size = v; }, re),
+    slider('rgRiver', 'Rivers as borders', o.river, 0, 1, 0.05, pc, (v) => { o.river = v; }, re),
+    slider('rgMtn', 'Mountains as borders', o.mtn, 0, 1, 0.05, pc, (v) => { o.mtn = v; }, re),
+    slider('rgForest', 'Forests as borders', o.forest, 0, 1, 0.05, pc, (v) => { o.forest = v; }, re),
+    slider('rgRoad', 'Roads hold regions together', o.road, 0, 1, 0.05, pc, (v) => { o.road = v; }, re),
+    h('div', { class: 'acts' }, h('button', { class: 'btn', text: 'Reroll wild regions', onclick: () => { o.seed = (o.seed | 0) + 1; re(); } })),
+    h('div', { class: 'acts' },
+      h('button', { class: 'btn primary', id: 'regApply', text: 'Put borders on the map', disabled: !REG, onclick: () => applyRegions(true) }),
+      h('button', { class: 'btn', text: 'Borders only', disabled: !REG, onclick: () => applyRegions(false) }),
+      h('button', { class: 'btn', text: 'Take them off', disabled: !S.roads.some((r) => r.gen) && !S.labels.some((l) => l.gen), onclick: () => { pushObjUndo(); S.roads = S.roads.filter((r) => !r.gen); S.labels = S.labels.filter((l) => !l.gen); afterObjectsChange(false); renderInspector(); } })),
+    h('p', { text: 'Put borders on the map draws these as region borders (with names) on the finished atlas. Edit them like any other line; drawn with the Regions tool, your own borders stay fixed when this view redraws.' }),
+    h('p', { text: REG ? `${settled} settled region${settled === 1 ? '' : 's'}, ${wild} wild.` : '' }));
+}
 // ===================================================================== undo
 const hist = { undo: [], redo: [] };
 const snapObjects = () => JSON.stringify({ places: S.places, labels: S.labels, roads: S.roads });
@@ -2041,6 +2282,7 @@ function afterUndoGen(e) { const d = e.data || {}; if (ui.autoGen && terrainStal
 function updateUndoUI() { $('undoBtn').disabled = !hist.undo.length; $('redoBtn').disabled = !hist.redo.length; }
 
 function afterLayerChange(name, full) {
+  regionDirty();
   if (full) sketchAll();
   if (name === 'land' || name === 'mtn') markTerrainStale();
   if (name === 'plat' || name === 'lvlw' || name === 'dry' || name === 'foreign' || name === 'ice' || name === 'forest') scheduleRaster();
@@ -2049,6 +2291,7 @@ function afterLayerChange(name, full) {
   autosave();
 }
 function afterObjectsChange(roadsToo) {
+  regionDirty();
   relayout();
   if (roadsToo !== false) scheduleRoads();
   scheduleStatic(); autosave();
@@ -2255,8 +2498,8 @@ view.addEventListener('pointerdown', (e) => {
   }
   if (ui.tool === 'place') { if (mx >= 0 && my >= 0 && mx <= MW && my <= MH) addPlace(ui.placeType, mx, my); return; }
   if (ui.tool === 'label') { if (mx >= 0 && my >= 0 && mx <= MW && my <= MH) addLabel(ui.labelStyle, mx, my); return; }
-  if (ui.tool === 'road' || ui.tool === 'river') {
-    if (!ui.draft) ui.draft = ui.tool === 'river' ? { kind: 'river', size: ui.riverSize, pts: [] } : { kind: ui.roadKind, pts: [] };
+  if (ui.tool === 'road' || ui.tool === 'river' || ui.tool === 'rline') {
+    if (!ui.draft) ui.draft = ui.tool === 'river' ? { kind: 'river', size: ui.riverSize, pts: [] } : { kind: ui.tool === 'rline' ? 'border' : ui.roadKind, pts: [] };
     const last = ui.draft.pts[ui.draft.pts.length - 1];
     if (!last || Math.hypot(last[0] - mx, last[1] - my) > 2 / V.s) ui.draft.pts.push([mx, my]);
     renderInspector(); redraw(); return;
@@ -2343,7 +2586,7 @@ function pointerEnd(e) {
 view.addEventListener('pointerup', pointerEnd);
 view.addEventListener('pointercancel', pointerEnd);
 view.addEventListener('pointerleave', () => { mouse.in = false; redraw(); });
-view.addEventListener('dblclick', (e) => { if ((ui.tool === 'road' || ui.tool === 'river') && ui.draft) { ui.draft.pts.pop(); finishRoad(); renderInspector(); } });
+view.addEventListener('dblclick', (e) => { if ((ui.tool === 'road' || ui.tool === 'river' || ui.tool === 'rline') && ui.draft) { ui.draft.pts.pop(); finishRoad(); renderInspector(); } });
 view.addEventListener('contextmenu', (e) => e.preventDefault());
 view.addEventListener('wheel', (e) => {
   e.preventDefault();
@@ -2428,6 +2671,7 @@ function renderInspector() {
   if (ui.tab === 'map') { box.append(...mapInspector()); return; }
   if (ui.tab === 'world') { box.append(...worldInspector()); return; }
   if (ui.insert) { box.append(insertPanel()); return; }
+  { const rp = regionPanel(); if (rp) box.append(rp); }
   const t = TOOLS.find((x) => x.id === ui.tool);
   const sel = getSel();
   if (sel) box.append(selInspector(sel));
@@ -2436,6 +2680,7 @@ function renderInspector() {
   if (ui.tool === 'place') box.append(placeToolInspector());
   if (ui.tool === 'label') box.append(labelToolInspector());
   if (ui.tool === 'road') box.append(roadToolInspector());
+  if (ui.tool === 'rline') box.append(rlineToolInspector());
   if (ui.tool === 'river') box.append(riverToolInspector());
   if (ui.tool === 'gen') box.append(genInspector());
   if ((ui.tool === 'select' || ui.tool === 'pan') && !sel) box.append(idleInspector());
@@ -2958,6 +3203,15 @@ function riverToolInspector() {
       h('button', { class: 'btn', text: 'Cancel', disabled: !ui.draft, onclick: () => { ui.draft = null; renderInspector(); redraw(); } })),
     h('p', { text: 'Name it with Labels → River.' }));
 }
+function rlineToolInspector() {
+  return h('div', { class: 'sec' }, h('h3', { text: 'Draw a region border' }),
+    h('p', { text: ui.draft ? `${ui.draft.pts.length} point${ui.draft.pts.length === 1 ? '' : 's'} so far. Double-click or press Enter to finish.` : 'Click to add points along the border; double-click to finish. The Regions view treats your lines as fixed borders and divides the rest around them.' }),
+    h('div', { class: 'acts' },
+      h('button', { class: 'btn primary', text: 'Finish border', disabled: !(ui.draft && ui.draft.pts.length >= 2), onclick: () => { finishRoad(); renderInspector(); } }),
+      h('button', { class: 'btn', text: 'Cancel', disabled: !ui.draft, onclick: () => { ui.draft = null; renderInspector(); redraw(); } })),
+    h('label', { class: 'check' }, (() => { const c = h('input', { type: 'checkbox', id: 'showRL' }); c.checked = vis('regionlines'); c.onchange = () => { S.p.show.regionlines = c.checked; scheduleStatic(); redraw(); autosave(); }; return c; })(), 'Show region borders on the map'),
+    h('p', { text: 'To have them drawn for you, open the Regions view and press Put borders on the map.' }));
+}
 function roadToolInspector() {
   return h('div', { class: 'sec' }, h('h3', { text: 'Draw a route' }),
     seg('roadKind', Object.entries(ROAD_KINDS), ui.roadKind, (k) => { ui.roadKind = k; if (ui.draft) ui.draft.kind = k; }),
@@ -3176,7 +3430,7 @@ function setPure(on) {
   toast(on ? 'Pure terrain: names, symbols, roads, borders and grid hidden' : 'Names and symbols shown again');
 }
 function showSection() {
-  const items = [['labels', 'Labels (realms, ranges, seas)'], ['names', 'Place names'], ['symbols', 'Place symbols'], ['roads', 'Roads and routes'], ['borders', 'Borders and foreign land'], ['rivers', 'Rivers'], ['texture', 'Steppe and marsh texture']];
+  const items = [['labels', 'Labels (realms, ranges, seas)'], ['names', 'Place names'], ['symbols', 'Place symbols'], ['roads', 'Roads and routes'], ['regionlines', 'Region borders'], ['borders', 'Borders and foreign land'], ['rivers', 'Rivers'], ['texture', 'Steppe and marsh texture']];
   const pure = h('input', { type: 'checkbox', id: 'sPure' }); pure.checked = S.p.pure; pure.onchange = () => setPure(pure.checked);
   const sec = h('div', { class: 'sec' }, h('h3', { text: 'Show on map' }),
     h('label', { class: 'check', style: 'font-weight:600' }, pure, 'Pure terrain (no names or symbols)'));
@@ -3687,7 +3941,7 @@ async function exportPng() {
 
 // ===================================================================== chrome wiring
 function toast(msg) { const t = $('toast'); t.textContent = msg; t.classList.add('on'); clearTimeout(toast.t); toast.t = setTimeout(() => t.classList.remove('on'), 2600); }
-$('vAtlas').onclick = () => setView('atlas'); $('vOverlay').onclick = () => setView('overlay'); $('vSketch').onclick = () => setView('sketch');
+$('vAtlas').onclick = () => setView('atlas'); $('vOverlay').onclick = () => setView('overlay'); $('vSketch').onclick = () => setView('sketch'); $('vRegions').onclick = () => setView('regions');
 $('undoBtn').onclick = undo; $('redoBtn').onclick = redo;
 $('pureBtn').onclick = () => setPure(!S.p.pure);
 
