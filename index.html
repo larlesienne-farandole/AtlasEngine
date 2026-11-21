@@ -1654,10 +1654,20 @@ function drawStatic(c, k, cw, ch) {
     let pts = r.auto ? r.pts : E.chaikin(r.pts, 3);
     if (pts.length < 2) return;
     c.beginPath(); c.moveTo(pts[0][0], pts[0][1]); for (let i = 1; i < pts.length; i++) c.lineTo(pts[i][0], pts[i][1]);
-    if (r.kind === 'road') { c.setLineDash([]); c.strokeStyle = 'rgb(128,46,34)'; c.lineWidth = 0.95; }
-    else if (r.kind === 'trail') { c.setLineDash([3.5, 3.5]); c.strokeStyle = 'rgba(128,62,40,0.92)'; c.lineWidth = 0.68; }
-    else { c.setLineDash([4.5, 4.5]); c.strokeStyle = 'rgba(56,100,128,0.85)'; c.lineWidth = 0.65; }
-    c.stroke(); c.setLineDash([]);
+    c.lineJoin = 'round';
+    if (r.kind === 'road') {
+      // engraved-atlas road: a soft pale casing so it lifts off the terrain, then a fine dark line
+      c.setLineDash([]); c.lineCap = 'round';
+      c.strokeStyle = 'rgba(250,244,228,0.5)'; c.lineWidth = 2.2; c.stroke();
+      c.strokeStyle = 'rgb(84,40,30)'; c.lineWidth = 0.95; c.stroke();
+    } else if (r.kind === 'trail') {
+      // footpath: a row of fine round dots
+      c.lineCap = 'round'; c.setLineDash([0.01, 2.6]);
+      c.strokeStyle = 'rgba(250,244,228,0.5)'; c.lineWidth = 2.0; c.stroke();
+      c.strokeStyle = 'rgb(92,50,36)'; c.lineWidth = 1.15; c.stroke();
+      c.lineCap = 'butt';
+    } else { c.setLineDash([4.5, 4.5]); c.strokeStyle = 'rgba(56,100,128,0.85)'; c.lineWidth = 0.65; c.stroke(); }
+    c.setLineDash([]); c.lineCap = 'butt';
   };
   if (vis('roads')) { for (const r of autoRoads) drawRoad({ ...r, auto: true }); for (const r of S.roads) if (r.kind !== 'river') drawRoad(r); }
 }
