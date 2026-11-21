@@ -110,7 +110,13 @@ button { cursor: pointer; }
 
 /* ---------- tool rail */
 .tools { grid-area: tools; display: flex; flex-direction: column; gap: 3px; background: var(--panel); border: 1px solid var(--line); border-radius: var(--r); padding: 6px; overflow-y: auto; min-height: 0; }
-.tools .grp { font: 600 9px/1 var(--f-ui); letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted); text-align: center; padding: 8px 0 3px; }
+.tools .grp { font: 600 9px/1 var(--f-ui); letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted); text-align: center; padding: 8px 0 3px; letter-spacing: 0.08em; border: 0; background: none; border-radius: 5px; display: flex; align-items: center; justify-content: center; gap: 3px; cursor: pointer; }
+.tools .grp:hover { color: var(--ink); background: var(--panel-2); }
+.tools .grp svg { width: 8px; height: 8px; flex: none; transition: transform 0.15s; }
+.tools .grp span { min-width: 0; }
+.tools .grp[aria-expanded="false"] svg { transform: rotate(-90deg); }
+.tools .tool.shut { display: none; }
+.namegrid { display: grid; gap: 2px; }
 .tool { display: grid; justify-items: center; gap: 3px; border: 0; background: none; border-radius: 6px; padding: 7px 2px 6px; color: var(--muted); font-size: 10.5px; line-height: 1.1; }
 .tool svg { width: 22px; height: 22px; }
 .tool:hover { background: var(--panel-2); color: var(--ink); }
@@ -168,6 +174,7 @@ textarea.txt { resize: vertical; min-height: 54px; font: 15px/1.3 var(--f-map); 
   .stage { height: 64vh; min-height: 340px; }
   .tools { flex-direction: row; overflow-x: auto; overflow-y: hidden; padding: 4px; }
   .tools .grp { display: none; }
+  .tools .tool.shut { display: grid; }
   .tool { min-width: 58px; }
   .panel { min-height: 0; }
   .insp { overflow: visible; }
@@ -1228,13 +1235,20 @@ const ROAD_KINDS = { road: 'Road', trail: 'Trail', sea: 'Sea route' };
 
 // ===================================================================== names
 // Real-world place names, used as placeholders you can rename.
-const NAMES = {"town": ["Antioch", "Aleppo", "Tabriz", "Samarkand", "Bukhara", "Merv", "Herat", "Konya", "Trebizond", "Erzurum", "Mosul", "Basra", "Shiraz", "Isfahan", "Kerman", "Yazd", "Kashan", "Qazvin", "Hamadan", "Nishapur", "Balkh", "Kandahar", "Ghazni", "Multan", "Lahore", "Peshawar", "Tiflis", "Batumi", "Kutaisi", "Yerevan", "Ganja", "Shemakha", "Derbent", "Astrakhan", "Kazan", "Saratov", "Smolensk", "Pskov", "Novgorod", "Tver", "Ryazan", "Vologda", "Kostroma", "Riga", "Reval", "Dorpat", "Vilna", "Kovno", "Grodno", "Lemberg", "Cracow", "Posen", "Danzig", "Thorn", "Breslau", "Brno", "Pressburg", "Buda", "Szeged", "Debrecen", "Kassa", "Temesvár", "Jassy", "Galatz", "Varna", "Ruse", "Plovdiv", "Sofia", "Niš", "Skopje", "Ohrid", "Salonica", "Larissa", "Patras", "Corinth", "Nauplia", "Smyrna", "Bursa", "Ankara", "Sivas", "Kayseri", "Adana", "Tarsus", "Edessa", "Mardin", "Van", "Bitlis", "Damascus", "Homs", "Hama", "Tyre", "Sidon", "Acre", "Jaffa", "Gaza", "Petra", "Palmyra", "Toledo", "Córdoba", "Seville", "Granada", "Málaga", "Murcia", "Valencia", "Tortosa", "Lleida", "Zaragoza", "Burgos", "León", "Oviedo", "Lugo", "Braga", "Porto", "Coimbra", "Évora", "Faro", "Mérida", "Cáceres", "Ávila", "Segovia", "Soria", "Tudela", "Pamplona", "Bayonne", "Pau", "Toulouse", "Albi", "Rodez", "Nîmes", "Arles", "Avignon", "Orange", "Valence", "Grenoble", "Chambéry", "Annecy", "Lyon", "Mâcon", "Dijon", "Troyes", "Reims", "Laon", "Amiens", "Rouen", "Caen", "Bayeux", "Rennes", "Vannes", "Quimper", "Nantes", "Angers", "Tours", "Blois", "Orléans", "Bourges", "Nevers", "Poitiers", "Limoges", "Périgueux", "Cahors", "Agen", "Bordeaux", "Saintes", "Verona", "Padua", "Vicenza", "Mantua", "Cremona", "Pavia", "Bergamo", "Brescia", "Trento", "Udine", "Ferrara", "Ravenna", "Rimini", "Ancona", "Perugia", "Assisi", "Siena", "Lucca", "Pisa", "Arezzo", "Orvieto", "Viterbo", "Spoleto", "Capua", "Benevento", "Salerno", "Bari", "Brindisi", "Lecce", "Taranto", "Cosenza", "Messina", "Catania", "Syracuse", "Agrigento", "Trapani", "Ragusa", "Split", "Zadar", "Šibenik", "Kotor", "Durrës", "Shkodër", "Berat", "Tlemcen", "Fez", "Meknes", "Tétouan", "Tangier", "Kairouan", "Sousse", "Sfax", "Gabès", "Tripoli", "Benghazi", "Cyrene", "Alexandria", "Rosetta", "Damietta", "Asyut", "Luxor", "Aswan", "Aden", "Taiz", "Muscat", "Sohar", "Nizwa", "Hormuz", "Lar", "Bam", "Zabol", "Mashhad", "Tus", "Gorgan", "Sari", "Rasht", "Ardabil", "Maragheh", "Urmia", "Khiva", "Urgench", "Kokand", "Khujand", "Osh", "Kashgar", "Yarkand", "Khotan", "Turfan", "Hami", "Dunhuang", "Zhangye", "Lanzhou", "Inverness", "Perth", "Stirling", "Dundee", "Aberdeen", "Elgin", "Oban", "Kendal", "Carlisle", "Durham", "Ripon", "Lincoln", "Norwich", "Ely", "Exeter", "Truro", "Wells", "Hereford", "Chester", "Shrewsbury", "Galway", "Sligo", "Limerick", "Kilkenny", "Cork", "Bergen", "Trondheim", "Ålesund", "Stavanger", "Uppsala", "Visby", "Kalmar", "Lund", "Turku", "Tampere", "Oulu", "Vyborg", "Bremen", "Lübeck", "Rostock", "Stralsund", "Lüneburg", "Goslar", "Erfurt", "Bamberg", "Würzburg", "Regensburg", "Passau", "Ulm", "Konstanz", "Basel", "Lucerne", "Chur", "Innsbruck", "Salzburg", "Graz", "Linz", "Ljubljana", "Maribor"], "realm": ["Armenia", "Georgia", "Bactria", "Sogdia", "Khorasan", "Anatolia", "Cilicia", "Cappadocia", "Lydia", "Phrygia", "Thrace", "Macedonia", "Epirus", "Illyria", "Dalmatia", "Pannonia", "Dacia", "Moldavia", "Wallachia", "Bohemia", "Moravia", "Silesia", "Galicia", "Volhynia", "Livonia", "Courland", "Karelia", "Bavaria", "Swabia", "Saxony", "Thuringia", "Franconia", "Flanders", "Brabant", "Burgundy", "Provence", "Aquitaine", "Gascony", "Brittany", "Normandy", "Lorraine", "Savoy", "Lombardy", "Tuscany", "Calabria", "Apulia", "Sicily", "Castile", "Aragon", "Navarre", "Asturias", "Andalusia", "Algarve", "Mauretania", "Numidia", "Cyrenaica", "Nubia", "Abyssinia", "Yemen", "Oman", "Hejaz", "Mesopotamia", "Assyria", "Media", "Persis", "Elam", "Hyrcania", "Parthia", "Margiana", "Chorasmia", "Ferghana", "Kashmir", "Punjab", "Sindh", "Bengal", "Mysore", "Deccan", "Tibet", "Dzungaria", "Manchuria", "Cambria", "Cornwall", "Munster", "Leinster", "Ulster", "Connacht", "Jutland", "Scania", "Gotland", "Finland", "Lapland", "Tyrol", "Carinthia", "Styria", "Carniola", "Istria", "Bosnia", "Rascia", "Zeta"], "range": ["Zagros", "Taurus", "Pontic", "Elburz", "Caucasus", "Pamir", "Hindu Kush", "Tian Shan", "Altai", "Kunlun", "Karakoram", "Atlas", "Rif", "Pyrenees", "Cantabrian", "Apennine", "Dinaric", "Balkan", "Rhodope", "Pindus", "Carpathian", "Tatra", "Sudeten", "Harz", "Vosges", "Jura", "Grampian", "Cambrian", "Pennine", "Ural", "Lebanon", "Hajar", "Sulaiman", "Aravalli", "Vindhya", "Satpura", "Drakensberg", "Ahaggar", "Tibesti", "Simien", "Rwenzori", "Andes", "Cascade", "Ozark", "Appalachian", "Sierra Madre", "Sayan", "Verkhoyansk", "Kolyma", "Stanovoy", "Khingan", "Qinling", "Annamite", "Arakan", "Kopet Dag", "Troodos", "Velebit", "Prokletije", "Bükk", "Mátra", "Bihor", "Făgăraș"], "sea": ["Marmara", "Azov", "Crete", "Ligurian", "Tyrrhenian", "Ionian", "Adriatic", "Aegean", "Levant", "Alboran", "Balearic", "Biscay", "the Hebrides", "Barents", "Bothnia", "Åland", "Okhotsk", "Japan", "Galilee", "Arabia", "Bengal", "Andaman", "Java", "Banda", "Celebes", "Sulu", "Labrador", "Sargasso"], "gulf": ["Aden", "Aqaba", "Suez", "Sidra", "Gabès", "Tunis", "Genoa", "Taranto", "Corinth", "Patras", "Salonica", "Smyrna", "Iskenderun", "Antalya", "Riga", "Finland", "Bothnia", "Gdańsk", "Cádiz", "Valencia", "Venice", "Trieste", "Kotor", "Oman", "Kutch", "Khambhat", "Mannar", "Tonkin", "Siam", "Carpentaria", "Honduras", "Darién", "Guinea", "Maine", "Alaska", "Anadyr"]};
+const NAME_REGIONS = {"ireland": {"label": "Ireland", "town": ["Galway", "Sligo", "Limerick", "Kilkenny", "Cork", "Athlone", "Kildare", "Kells", "Clonmel", "Tralee", "Ennis", "Derry", "Armagh", "Dundalk", "Wexford", "Youghal", "Bantry", "Cashel", "Mullingar", "Tuam", "Kinsale", "Dingle", "Carlow", "Navan", "Trim", "Ardee", "Birr", "Roscrea", "Donegal", "Ballina", "Westport", "Clifden", "Dungarvan", "Lismore", "Kilrush", "Boyle", "Longford", "Tullamore", "Enniscorthy", "Clonmacnoise", "Glendalough", "Kilmallock", "Fethard", "Cahir", "Dunmore"], "realm": ["Munster", "Leinster", "Ulster", "Connacht", "Meath", "Ossory", "Breifne", "Desmond", "Thomond", "Oriel", "Dál Riata", "Airgíalla"], "range": ["Galtee", "Wicklow", "Mourne", "Comeragh", "Knockmealdown", "Slieve Bloom", "Macgillycuddy", "Sperrin", "Nephin"], "sea": ["Moyle", "Iona"], "gulf": ["Galway", "Bantry", "Donegal", "Dingle", "Tralee"]}, "britain": {"label": "Britain", "town": ["Inverness", "Perth", "Stirling", "Dundee", "Aberdeen", "Elgin", "Oban", "Kendal", "Carlisle", "Durham", "Ripon", "Lincoln", "Norwich", "Ely", "Exeter", "Truro", "Wells", "Hereford", "Chester", "Shrewsbury"], "realm": ["Cambria", "Cornwall", "Northumbria", "Mercia", "Wessex", "Fife"], "range": ["Grampian", "Cambrian", "Pennine", "Cheviot"], "sea": ["the Hebrides"], "gulf": ["Solway", "Moray"]}, "scandinavia": {"label": "Scandinavia and Finland", "town": ["Bergen", "Trondheim", "Ålesund", "Stavanger", "Uppsala", "Visby", "Kalmar", "Lund", "Turku", "Tampere", "Oulu"], "realm": ["Jutland", "Scania", "Gotland", "Finland", "Lapland"], "range": ["Kjølen", "Dovre"], "sea": ["Bothnia", "Åland"], "gulf": ["Finland", "Bothnia"]}, "france": {"label": "France", "town": ["Bayonne", "Pau", "Toulouse", "Albi", "Rodez", "Nîmes", "Arles", "Avignon", "Orange", "Valence", "Grenoble", "Chambéry", "Annecy", "Lyon", "Mâcon", "Dijon", "Troyes", "Reims", "Laon", "Amiens", "Rouen", "Caen", "Bayeux", "Rennes", "Vannes", "Quimper", "Nantes", "Angers", "Tours", "Blois", "Orléans", "Bourges", "Nevers", "Poitiers", "Limoges", "Périgueux", "Cahors", "Agen", "Bordeaux", "Saintes"], "realm": ["Flanders", "Brabant", "Burgundy", "Provence", "Aquitaine", "Gascony", "Brittany", "Normandy", "Lorraine"], "range": ["Vosges", "Cévennes", "Morvan"], "sea": [], "gulf": ["Lion"]}, "iberia": {"label": "Spain and Portugal", "town": ["Toledo", "Córdoba", "Seville", "Granada", "Málaga", "Murcia", "Valencia", "Tortosa", "Lleida", "Zaragoza", "Burgos", "León", "Oviedo", "Lugo", "Braga", "Porto", "Coimbra", "Évora", "Faro", "Mérida", "Cáceres", "Ávila", "Segovia", "Soria", "Tudela", "Pamplona"], "realm": ["Castile", "Aragon", "Navarre", "Asturias", "Andalusia", "Algarve", "Galicia"], "range": ["Pyrenees", "Cantabrian"], "sea": ["Balearic", "Biscay"], "gulf": ["Cádiz", "Valencia"]}, "italy": {"label": "Italy", "town": ["Verona", "Padua", "Vicenza", "Mantua", "Cremona", "Pavia", "Bergamo", "Brescia", "Trento", "Udine", "Ferrara", "Ravenna", "Rimini", "Ancona", "Perugia", "Assisi", "Siena", "Lucca", "Pisa", "Arezzo", "Orvieto", "Viterbo", "Spoleto", "Capua", "Benevento", "Salerno", "Bari", "Brindisi", "Lecce", "Taranto", "Cosenza", "Messina", "Catania", "Syracuse", "Agrigento", "Trapani", "Ragusa"], "realm": ["Lombardy", "Tuscany", "Calabria", "Apulia", "Sicily", "Savoy"], "range": ["Apennine"], "sea": ["Ligurian", "Tyrrhenian"], "gulf": ["Genoa", "Taranto", "Venice"]}, "german": {"label": "German lands and the Alps", "town": ["Breslau", "Brno", "Bremen", "Lübeck", "Rostock", "Stralsund", "Lüneburg", "Goslar", "Erfurt", "Bamberg", "Würzburg", "Regensburg", "Passau", "Ulm", "Konstanz", "Basel", "Lucerne", "Chur", "Innsbruck", "Salzburg", "Graz", "Linz"], "realm": ["Bohemia", "Moravia", "Silesia", "Bavaria", "Swabia", "Saxony", "Thuringia", "Franconia", "Tyrol", "Carinthia", "Styria"], "range": ["Sudeten", "Harz", "Jura"], "sea": [], "gulf": []}, "baltic": {"label": "Poland and the Baltic", "town": ["Riga", "Reval", "Dorpat", "Vilna", "Kovno", "Grodno", "Lemberg", "Cracow", "Posen", "Danzig", "Thorn"], "realm": ["Volhynia", "Livonia", "Courland", "Galicia"], "range": ["Tatra"], "sea": [], "gulf": ["Riga", "Gdańsk"]}, "russia": {"label": "Russia", "town": ["Astrakhan", "Kazan", "Saratov", "Smolensk", "Pskov", "Novgorod", "Tver", "Ryazan", "Vologda", "Kostroma", "Vyborg"], "realm": ["Karelia"], "range": ["Ural", "Sayan", "Verkhoyansk", "Kolyma", "Stanovoy"], "sea": ["Azov", "Barents", "Okhotsk"], "gulf": ["Anadyr"]}, "balkans": {"label": "Hungary and the Balkans", "town": ["Pressburg", "Buda", "Szeged", "Debrecen", "Kassa", "Temesvár", "Jassy", "Galatz", "Varna", "Ruse", "Plovdiv", "Sofia", "Niš", "Skopje", "Ohrid", "Split", "Zadar", "Šibenik", "Kotor", "Durrës", "Shkodër", "Berat", "Ljubljana", "Maribor"], "realm": ["Thrace", "Illyria", "Dalmatia", "Pannonia", "Dacia", "Moldavia", "Wallachia", "Carniola", "Istria", "Bosnia", "Rascia", "Zeta"], "range": ["Dinaric", "Balkan", "Rhodope", "Carpathian", "Velebit", "Prokletije", "Bükk", "Mátra", "Bihor", "Făgăraș"], "sea": ["Adriatic"], "gulf": ["Trieste", "Kotor"]}, "greece": {"label": "Greece", "town": ["Salonica", "Larissa", "Patras", "Corinth", "Nauplia"], "realm": ["Macedonia", "Epirus"], "range": ["Pindus"], "sea": ["Crete", "Ionian", "Aegean"], "gulf": ["Corinth", "Patras", "Salonica"]}, "anatolia": {"label": "Anatolia", "town": ["Konya", "Trebizond", "Erzurum", "Smyrna", "Bursa", "Ankara", "Sivas", "Kayseri", "Adana", "Tarsus", "Edessa", "Mardin", "Van", "Bitlis"], "realm": ["Anatolia", "Cilicia", "Cappadocia", "Lydia", "Phrygia"], "range": ["Taurus", "Pontic", "Troodos"], "sea": ["Marmara"], "gulf": ["Smyrna", "Iskenderun", "Antalya"]}, "caucasus": {"label": "Caucasus", "town": ["Tiflis", "Batumi", "Kutaisi", "Yerevan", "Ganja", "Shemakha", "Derbent"], "realm": ["Armenia", "Georgia"], "range": ["Caucasus"], "sea": [], "gulf": []}, "levant": {"label": "Levant and Arabia", "town": ["Antioch", "Aleppo", "Mosul", "Basra", "Damascus", "Homs", "Hama", "Tyre", "Sidon", "Acre", "Jaffa", "Gaza", "Petra", "Palmyra", "Aden", "Taiz", "Muscat", "Sohar", "Nizwa"], "realm": ["Yemen", "Oman", "Hejaz", "Mesopotamia", "Assyria"], "range": ["Lebanon", "Hajar"], "sea": ["Levant", "Galilee", "Arabia"], "gulf": ["Aden", "Aqaba", "Suez", "Oman"]}, "persia": {"label": "Persia and Central Asia", "town": ["Tabriz", "Samarkand", "Bukhara", "Merv", "Herat", "Shiraz", "Isfahan", "Kerman", "Yazd", "Kashan", "Qazvin", "Hamadan", "Nishapur", "Balkh", "Kandahar", "Ghazni", "Lar", "Bam", "Zabol", "Mashhad", "Tus", "Gorgan", "Sari", "Rasht", "Ardabil", "Maragheh", "Urmia", "Khiva", "Urgench", "Kokand", "Khujand", "Osh", "Hormuz"], "realm": ["Bactria", "Sogdia", "Khorasan", "Media", "Persis", "Elam", "Hyrcania", "Parthia", "Margiana", "Chorasmia", "Ferghana"], "range": ["Zagros", "Elburz", "Pamir", "Hindu Kush", "Kopet Dag", "Sulaiman"], "sea": [], "gulf": []}, "india": {"label": "India", "town": ["Multan", "Lahore", "Peshawar"], "realm": ["Kashmir", "Punjab", "Sindh", "Bengal", "Mysore", "Deccan"], "range": ["Aravalli", "Vindhya", "Satpura", "Karakoram"], "sea": ["Bengal", "Andaman"], "gulf": ["Kutch", "Khambhat", "Mannar"]}, "africa": {"label": "North and East Africa", "town": ["Tlemcen", "Fez", "Meknes", "Tétouan", "Tangier", "Kairouan", "Sousse", "Sfax", "Gabès", "Tripoli", "Benghazi", "Cyrene", "Alexandria", "Rosetta", "Damietta", "Asyut", "Luxor", "Aswan"], "realm": ["Mauretania", "Numidia", "Cyrenaica", "Nubia", "Abyssinia"], "range": ["Atlas", "Rif", "Ahaggar", "Tibesti", "Simien", "Rwenzori", "Drakensberg"], "sea": ["Alboran"], "gulf": ["Sidra", "Gabès", "Tunis", "Guinea"]}, "eastasia": {"label": "Inner and East Asia", "town": ["Kashgar", "Yarkand", "Khotan", "Turfan", "Hami", "Dunhuang", "Zhangye", "Lanzhou"], "realm": ["Tibet", "Dzungaria", "Manchuria"], "range": ["Tian Shan", "Altai", "Kunlun", "Khingan", "Qinling", "Annamite", "Arakan"], "sea": ["Japan", "Java", "Banda", "Celebes", "Sulu"], "gulf": ["Tonkin", "Siam"]}, "americas": {"label": "Americas and Oceania", "town": [], "realm": [], "range": ["Andes", "Cascade", "Ozark", "Appalachian", "Sierra Madre"], "sea": ["Labrador", "Sargasso"], "gulf": ["Carpentaria", "Honduras", "Darién", "Maine", "Alaska"]}};
 let nameRng = E.mulberry32(Date.now() & 0xffffff);
 // kind: town | realm | range | sea | gulf. Avoids names already on the map.
+function nameRegionsOn() { const on = S.p.nameRegions; return on && on.length ? on : Object.keys(NAME_REGIONS); }
+function namePool(kind) {
+  let pool = []; for (const id of nameRegionsOn()) if (NAME_REGIONS[id]) pool = pool.concat(NAME_REGIONS[id][kind] || []);
+  if (pool.length < 3 && kind !== 'town') for (const id of nameRegionsOn()) if (NAME_REGIONS[id]) pool = pool.concat(NAME_REGIONS[id].town || []);
+  if (!pool.length) for (const r of Object.values(NAME_REGIONS)) pool = pool.concat(r[kind] || []);
+  return pool;
+}
 function genName(R, kind) {
   if (typeof R === 'string') { kind = R; R = null; }
   R = R || nameRng; kind = kind || 'town';
-  const pool = NAMES[kind] || NAMES.town;
+  const pool = namePool(kind);
   const used = S.places.map((p) => p.name || '').concat(S.labels.map((l) => l.text || ''), [S.name || '']);
   for (let t = 0; t < 60; t++) {
     const n = pool[Math.floor(R() * pool.length)];
@@ -1942,14 +1956,32 @@ const isBrush = (id) => id === 'eraser' || !!(TOOLS.find((t) => t.id === id) || 
 const brushRadius = () => ui.tool === 'eraser' ? Math.max(ui.eraser.size, 0.5) : ui.brush.size;
 function buildTools() {
   const nav = $('tools'); nav.innerHTML = '';
+  let grp = null;
   for (const t of TOOLS) {
-    if (t.g) { const d = document.createElement('div'); d.className = 'grp'; d.textContent = t.g; nav.appendChild(d); continue; }
-    const b = document.createElement('button'); b.className = 'tool'; b.id = 'tool-' + t.id;
+    if (t.g) {
+      grp = t.g; const g = grp;
+      const d = document.createElement('button'); d.className = 'grp'; d.id = 'grp-' + g; d.type = 'button';
+      d.setAttribute('aria-expanded', String(!toolGroupsShut.has(g))); d.title = 'Show or hide ' + g.toLowerCase() + ' tools';
+      d.innerHTML = `<span>${g}</span><svg viewBox="0 0 10 10" aria-hidden="true"><path d="M2.5 3.8 5 6.3l2.5-2.5" fill="none" stroke="currentColor" stroke-width="1.4"/></svg>`;
+      d.onclick = () => { if (toolGroupsShut.has(g)) toolGroupsShut.delete(g); else toolGroupsShut.add(g); try { localStorage.setItem('ae-shut', JSON.stringify([...toolGroupsShut])); } catch (e) {} syncToolGroups(); };
+      nav.appendChild(d); continue;
+    }
+    const b = document.createElement('button'); b.className = 'tool'; b.id = 'tool-' + t.id; b.dataset.g = grp || '';
     b.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">${t.icon}</svg>${t.name}`;
     b.title = `${t.name} (${t.key.toUpperCase()})`;
     b.setAttribute('aria-pressed', String(ui.tool === t.id));
     b.onclick = () => setTool(t.id);
     nav.appendChild(b);
+  }
+}
+let toolGroupsShut = new Set();
+try { toolGroupsShut = new Set(JSON.parse(localStorage.getItem('ae-shut') || '[]')); } catch (e) {}
+function syncToolGroups() {
+  for (const t of TOOLS) {
+    if (t.g) { const d = $('grp-' + t.g); if (d) d.setAttribute('aria-expanded', String(!toolGroupsShut.has(t.g))); continue; }
+    const b = $('tool-' + t.id); if (!b) continue;
+    // a shut group still shows the tool you are using
+    b.classList.toggle('shut', toolGroupsShut.has(b.dataset.g) && ui.tool !== t.id);
   }
 }
 function setTool(id) {
@@ -1961,7 +1993,7 @@ function setTool(id) {
   if (t && !t.brush && !['select', 'pan'].includes(id) && ui.view === 'overlay') setView('atlas');
   ui.tab = 'tool'; syncTabs();
   view.style.cursor = id === 'pan' ? 'grab' : isBrush(id) ? 'none' : id === 'select' ? 'default' : 'crosshair';
-  updateHint(); renderInspector(); redraw();
+  updateHint(); renderInspector(); redraw(); syncToolGroups();
 }
 function updateHint() {
   const t = TOOLS.find((x) => x.id === ui.tool), h = $('hint');
@@ -1972,6 +2004,7 @@ function setView(v) {
   $('vAtlas').setAttribute('aria-pressed', String(v === 'atlas'));
   $('vOverlay').setAttribute('aria-pressed', String(v === 'overlay'));
   $('vSketch').setAttribute('aria-pressed', String(v === 'sketch'));
+  if (ui.tab === 'tool') renderInspector();
   redraw();
 }
 
@@ -3021,6 +3054,21 @@ function mapInspector() {
     slider('pRiv', 'River density', S.p.rivers, 0.3, 3, 0.05, pct, () => {}, (v) => { S.p.rivers = v; computeRivers(); buildCostGrid(); scheduleRoads(); scheduleStatic(); autosave(); }),
     slider('pGridStep', 'Graticule spacing', S.p.gridStep, 60, 400, 5, (v) => Math.round(v) + ' mi', (v) => { S.p.gridStep = v; scheduleStatic(); }, autosave),
     h('label', { class: 'check' }, (() => { const c = h('input', { type: 'checkbox', id: 'pRoads' }); c.checked = S.p.autoRoads; c.onchange = () => { S.p.autoRoads = c.checked; scheduleRoads(); autosave(); }; return c; })(), 'Auto-connect towns with roads')));
+  {
+    const on = new Set(nameRegionsOn()), boxes = [];
+    const save = () => { const ids = Object.keys(NAME_REGIONS).filter((id) => on.has(id)); S.p.nameRegions = ids.length === Object.keys(NAME_REGIONS).length ? null : ids; autosave(); };
+    const grid = h('div', { class: 'namegrid' });
+    for (const [id, r] of Object.entries(NAME_REGIONS)) {
+      const c = h('input', { type: 'checkbox', id: 'nr-' + id }); c.checked = on.has(id);
+      c.onchange = () => { if (c.checked) on.add(id); else on.delete(id); if (!on.size) { on.add(id); c.checked = true; toast('Keep at least one'); } save(); };
+      boxes.push([id, c]); grid.append(h('label', { class: 'check' }, c, r.label));
+    }
+    const setAll = (v) => { on.clear(); for (const [id, c] of boxes) { c.checked = v || id === boxes[0][0]; if (c.checked) on.add(id); } save(); };
+    secs.push(h('div', { class: 'sec' }, h('h3', { text: 'Automatic names' }),
+      h('p', { text: 'New towns, realms, ranges and seas take their names from the countries ticked here. Names already on the map stay.' }),
+      h('div', { class: 'acts' }, h('button', { class: 'btn', text: 'All', onclick: () => setAll(true) }), h('button', { class: 'btn', text: 'None', onclick: () => setAll(false) })),
+      grid));
+  }
   secs.push(h('div', { class: 'sec' }, h('h3', { text: 'Populate' }),
     h('p', { text: T ? 'Uses the current terrain.' : 'Generate terrain first.' }),
     h('div', { class: 'acts' },
