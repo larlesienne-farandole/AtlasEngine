@@ -628,8 +628,8 @@ function extractRivers(T, density) {
 }
 
 // --------------------------------------------------------------------- atlas raster render
-const WET = [[150,184,139],[166,195,152],[186,205,163],[204,212,170],[216,210,172],[212,198,160],[200,183,146],[188,170,136],[199,189,162],[219,212,192]];
-const DRY = [[196,203,162],[207,208,168],[214,210,171],[219,211,173],[217,204,165],[210,194,155],[199,181,144],[187,168,135],[199,189,162],[219,212,192]];
+const WET = [[141,168,133],[150,173,138],[163,180,148],[176,185,152],[192,192,160],[206,204,174],[190,180,150],[162,147,122],[141,127,111],[205,203,194]];
+const DRY = [[182,185,150],[189,189,153],[196,193,158],[202,197,162],[208,201,167],[210,204,176],[192,180,150],[162,147,122],[141,127,111],[205,203,194]];
 const BANDS = [0.0, 0.05, 0.11, 0.18, 0.27, 0.37, 0.48, 0.60, 0.73, 0.86];
 // Level brush: where painted (weight past 50%) the ground is set to exactly the chosen height.
 // A short ramp at the 50% contour keeps the edge crisp and exactly where the stroke was.
@@ -761,7 +761,7 @@ function renderRaster(st, T, W, H) {
       // woodland: a deeper, cooler green on the lower bands
       if (forF && forF[i] > 0 && bi <= 7) {
         const fw = forF[i] * Math.max(0.4, 0.5 - 0.06 * bi) * (1 - 0.15 * d);
-        r = r * (1 - fw) + 112 * fw; g = g * (1 - fw) + 152 * fw; b = b * (1 - fw) + 100 * fw;
+        r = r * (1 - fw) + 118 * fw; g = g * (1 - fw) + 146 * fw; b = b * (1 - fw) + 112 * fw;
       }
       const rmv = Math.min(1, 0.22 + rmask[i] * 1.2) * P.shade;
       if (iceM[i]) {
@@ -792,10 +792,9 @@ function renderRaster(st, T, W, H) {
       // pale outline on band boundaries
       let edge = false;
       if (x > 0 && x < W - 1 && y > 0 && y < H - 1) {
-        edge = band[i - 1] > bi || band[i + 1] > bi || band[i - W] > bi || band[i + W] > bi ||
-          band[i - W - 1] > bi || band[i - W + 1] > bi || band[i + W - 1] > bi || band[i + W + 1] > bi;
+        edge = band[i - 1] > bi || band[i + 1] > bi || band[i - W] > bi || band[i + W] > bi;
       }
-      if (edge && !iceM[i]) { r += (255 - r) * 0.42; g += (255 - g) * 0.42; b += (255 - b) * 0.42; }
+      if (edge && !iceM[i]) { r += (242 - r) * 0.24; g += (240 - g) * 0.24; b += (222 - b) * 0.24; }
       if (fo[i]) {
         const gr = (r + g + b) / 3;
         r = (r * 0.55 + gr * 0.45) * 0.55 + 236 * 0.45; g = (g * 0.55 + gr * 0.45) * 0.55 + 234 * 0.45; b = (b * 0.55 + gr * 0.45) * 0.55 + 224 * 0.45;
@@ -809,9 +808,9 @@ function renderRaster(st, T, W, H) {
       if (border[i]) { r = 104; g = 70; b = 112; }
     } else {
       const ds = dsea[i], depth = Math.min(1, ds / (260 * k));
-      r = 200 * (1 - depth) + 176 * depth + seaN[i] * 3; g = 238 * (1 - depth) + 228 * depth + seaN[i] * 3; b = 250 * (1 - depth) + 248 * depth + seaN[i] * 3;
+      r = 196 * (1 - depth) + 176 * depth + seaN[i] * 3; g = 226 * (1 - depth) + 213 * depth + seaN[i] * 3; b = 238 * (1 - depth) + 234 * depth + seaN[i] * 3;
       const halo = 0.55 * Math.exp(-ds / (7 * k));
-      r = r * (1 - halo) + 226 * halo; g = g * (1 - halo) + 246 * halo; b = b * (1 - halo) + 250 * halo;
+      r = r * (1 - halo) + 212 * halo; g = g * (1 - halo) + 234 * halo; b = b * (1 - halo) + 242 * halo;
       if (ds < 1.01) { r = r * 0.65 + 88 * 0.35; g = g * 0.65 + 128 * 0.35; b = b * 0.65 + 140 * 0.35; }
       if (seaIce[i]) {
         // the same ice sheet as on land: white, same blue-grey edge, coastline hidden beneath it
